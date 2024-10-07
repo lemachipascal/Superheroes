@@ -4,6 +4,8 @@ from flask import Flask, request, jsonify, abort
 from flask_migrate import Migrate
 from models import db, Hero, Power, HeroPower
 import os
+import logging
+
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE = os.environ.get(
@@ -24,15 +26,19 @@ def index():
 
 @app.route('/heroes', methods=['GET'])
 def get_heroes():
-    heroes = Hero.query.all()
-    return jsonify([hero.to_dict() for hero in heroes])
+    try:
+       heroes = Hero.query.all()
+       return jsonify([hero.to_dict() for hero in heroes]),200
+    except Exception as e:
+        app.logger.error(f"Error retrieving heroes:{e}")
+        return jsonify({'error': 'An unexpected error occured'}), 500
 
 @app.route('/heroes/<int:id>', methods=['GET'])
 def get_hero(id):
     hero = Hero.query.get(id)
     if hero is None:
         return jsonify({'error': 'Hero not found'}), 404
-    return jsonify(hero.to_dict(include=('hero_powers',)))
+    return jsonify(hero.to_dict()),200
 
 @app.route('/powers', methods=['GET'])
 def get_powers():
@@ -53,28 +59,31 @@ def update_power(id):
         return jsonify({'error': 'Power not found'}), 404
     
     data = request.get_json()
+
     if 'description' in data:
-        power.description = data['description']
-        db.session.commit()
-        return jsonify(power.to_dict()), 200
-    else:
-        return jsonify({'errors': ['validation errors']}), 400
+        try:  
+           power.description = data['description']
+           db.session.commit()
+           return jsonify(power.to_dict()), 200
+        except ValueError as e:
+           return jsonify({'error':[str(e)]}), 400
+        
+    return jsonify({'errors': ['No description provided']}), 400
     
 @app.route('/hero_powers', methods=['POST'])
 def create_hero_power():
     data = request.get_json()
-    new_hero_power = HeroPower(
-        strength=data['strength'],
-        power_id=data['power_id'],
-        hero_id=data['hero_id']
-    )
+    if 'strength' not in data or 'power_id' not in data or 'hero_id' not in data:
+        return jsonify({'errors': ['validation errors']}), 400
     try:
+        new_hero_power = HeroPower(**data)
         db.session.add(new_hero_power)
         db.session.commit()
         return jsonify(new_hero_power.to_dict()), 201
     except Exception as e:
         return jsonify({'errors': ['validation errors']}), 400
-
-
-if __name__ == '__main__':
-    app.run(port=5555, debug=True)
+    
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logging.error(f"ERROR: {str(e)}")
+    return jsonify({'error':'An unexpected error occured'}), 500
