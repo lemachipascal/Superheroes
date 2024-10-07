@@ -44,9 +44,10 @@ class Power(db.Model, SerializerMixin):
 
 
     # add validation
+    @validates('description')
     def validate_description(self, key, description):
-        if len(description) < 20:
-            raise ValueError('Description must be at least 20 characters long')
+        if not description or len(description) < 20:
+            raise ValueError("Description must be present and at least 20 characters long.")
         return description
 
     def __repr__(self):
@@ -80,4 +81,3 @@ class HeroPower(db.Model, SerializerMixin):
 
     def __repr__(self):
         return f'<HeroPower {self.id}>'
-
