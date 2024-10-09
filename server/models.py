@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import MetaData, ForeignKey
-from sqlalchemy.orm import validates, relationship
+from sqlalchemy import MetaData
+from sqlalchemy.orm import validates
+from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy_serializer import SerializerMixin
 
 metadata = MetaData(naming_convention={
@@ -9,7 +10,6 @@ metadata = MetaData(naming_convention={
 
 db = SQLAlchemy(metadata=metadata)
 
-
 class Hero(db.Model, SerializerMixin):
     __tablename__ = 'heroes'
 
@@ -17,17 +17,15 @@ class Hero(db.Model, SerializerMixin):
     name = db.Column(db.String)
     super_name = db.Column(db.String)
 
-    # add relationship
-    hero_power = relationship('HeroPower', back_populates='hero', cascade='all, delete-orphan')
+    # Relationship
+    hero_powers = db.relationship('HeroPower', back_populates='hero', cascade='all, delete-orphan')
+    powers = association_proxy('hero_powers', 'power')
 
-    # add serialization rules
-    serialize_only = ('id', 'name', 'super_name')
+    # Serialization rules so that we can serialize the related Heroes and Powers
+    serialize_rules = ('-hero_powers.hero', '-powers.heroes')
 
     def __repr__(self):
-        return f'<Hero {self.name}>'
-
-
-
+        return f'<Hero {self.id}>'
 
 class Power(db.Model, SerializerMixin):
     __tablename__ = 'powers'
@@ -36,14 +34,14 @@ class Power(db.Model, SerializerMixin):
     name = db.Column(db.String)
     description = db.Column(db.String)
 
-    # add relationship
+    # Relationship to HeroPower
     hero_powers = db.relationship('HeroPower', back_populates='power', cascade='all, delete-orphan')
+    heroes = association_proxy('hero_powers', 'hero')
 
-    # add serialization rules   
-    serialize_only = ('id', 'name', 'description')
+    # Serialization rules so that we can serialize the related Heroes
+    serialize_rules = ('-hero_powers.power', '-heroes.powers')
 
-
-    # add validation
+    # Validation rules
     @validates('description')
     def validate_description(self, key, description):
         if not description or len(description) < 20:
@@ -51,9 +49,7 @@ class Power(db.Model, SerializerMixin):
         return description
 
     def __repr__(self):
-        return f'<Power {self.name}>'
-
-
+        return f'<Power {self.id}>'
 
 class HeroPower(db.Model, SerializerMixin):
     __tablename__ = 'hero_powers'
@@ -61,23 +57,24 @@ class HeroPower(db.Model, SerializerMixin):
     id = db.Column(db.Integer, primary_key=True)
     strength = db.Column(db.String, nullable=False)
 
-    # add relationships
+    # Relationships to Hero and Power
     hero_id = db.Column(db.Integer, db.ForeignKey('heroes.id'))
     power_id = db.Column(db.Integer, db.ForeignKey('powers.id'))
 
-    hero = relationship('Hero', back_populates='hero_power')
-    power = relationship('Power', back_populates='hero_powers')
+    hero = db.relationship('Hero', back_populates='hero_powers')
+    power = db.relationship('Power', back_populates='hero_powers')
 
-    # add serialization rules
-    serialize_only = ('id', 'strength', 'hero_id', 'power_id')
+    # Serialization rules so that we can serialize the related Hero and Power
+    serialize_rules = ('-hero.hero_powers', '-power.hero_powers')
 
-    # add validation
+    # Validation rules
     @validates('strength')
     def validate_strength(self, key, strength):
-        if strength not in ['Strong', 'Weak']:
-            raise ValueError('Strength must be either "Strong" or "Weak"')
+        valid_strengths = ['Strong', 'Weak', 'Average']
+        if strength not in valid_strengths:
+            raise ValueError("Strength must be one of: Strong, Weak, Average")
         return strength
 
-
+    # custom __repr__ method
     def __repr__(self):
         return f'<HeroPower {self.id}>'
