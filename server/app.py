@@ -34,23 +34,39 @@ def get_heroes():
         return jsonify({'error': 'An unexpected error occured'}), 500
 
 @app.route('/heroes/<int:id>', methods=['GET'])
-def get_hero(id):
+def get_hero_by_id(id):
     hero = Hero.query.get(id)
     if hero is None:
         return jsonify({'error': 'Hero not found'}), 404
-    return jsonify(hero.to_dict()),200
+    
+    hero_data = {
+        'id': hero.id,
+        'name':  hero.name,
+        'super_name': hero.super_name,
+        'hero_powers': [hero_power.to_dict() for hero_power in hero.hero_power]
+    }
+    
+    return jsonify(hero_data), 200
+
+
+
 
 @app.route('/powers', methods=['GET'])
 def get_powers():
-    powers = Power.query.all()
-    return jsonify([power.to_dict() for power in powers])
+    try:
+        powers = Power.query.all()
+        return jsonify([power.to_dict() for power in powers]), 200
+    except Exception as e:
+        app.logger.error(f"Error retrieving powers: {e}")
+        return jsonify({'error': 'An unexpected error occured'}), 500
+    
 
 @app.route('/powers/<int:id>', methods=['GET'])
 def get_power(id):
     power = Power.query.get(id)
     if power is None:
         return jsonify({'error': 'Power not found'}), 404
-    return jsonify(power.to_dict())
+    return jsonify(power.to_dict()), 200
 
 @app.route('/powers/<int:id>', methods=['PATCH'])
 def update_power(id):
@@ -61,14 +77,17 @@ def update_power(id):
     data = request.get_json()
 
     if 'description' in data:
-        try:  
-           power.description = data['description']
-           db.session.commit()
-           return jsonify(power.to_dict()), 200
-        except ValueError as e:
-           return jsonify({'error':[str(e)]}), 400
+        power.description = data['description']
         
-    return jsonify({'errors': ['No description provided']}), 400
+        if not isinstance(power.description, str) or len(power.description) < 20:
+               return jsonify({'errors': ['validation errors']}), 400
+        
+    if not power.description:
+        return {"error": ["validation errors"]}
+    
+    db.session.commit()
+    return power.to_dict(), 200
+
     
 @app.route('/hero_powers', methods=['POST'])
 def create_hero_power():
@@ -87,3 +106,7 @@ def create_hero_power():
 def handle_exception(e):
     logging.error(f"ERROR: {str(e)}")
     return jsonify({'error':'An unexpected error occured'}), 500
+
+
+if __name__ == '__main__':
+    app.run(port=5555)
